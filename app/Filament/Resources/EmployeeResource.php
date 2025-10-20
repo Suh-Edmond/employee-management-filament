@@ -17,41 +17,79 @@ class EmployeeResource extends Resource
 {
     protected static ?string $model = Employee::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-users';
+
+    protected static ?string $navigationGroup = 'Employee Management';
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('first_name')
-                    ->required()
-                    ->maxLength(255),
-                Forms\Components\TextInput::make('last_name')
-                    ->required()
-                    ->maxLength(255),
-                Forms\Components\TextInput::make('email')
-                    ->email()
-                    ->required()
-                    ->maxLength(255),
-                Forms\Components\TextInput::make('address')
-                    ->maxLength(255),
-                Forms\Components\DatePicker::make('date_of_birth'),
-                Forms\Components\DatePicker::make('hired_date'),
-                Forms\Components\TextInput::make('zip_code')
-                    ->maxLength(255),
-                Forms\Components\TextInput::make('country_id')
-                    ->required()
-                    ->numeric(),
-                Forms\Components\TextInput::make('state_id')
-                    ->required()
-                    ->numeric(),
-                Forms\Components\TextInput::make('city_id')
-                    ->required()
-                    ->numeric(),
-                Forms\Components\TextInput::make('department_id')
-                    ->required()
-                    ->numeric(),
-            ]);
+                Forms\Components\Section::make('Personal Information')
+                    ->description('Enter the personal details of the employee.  Fields marked with * are required.')
+                    ->schema([
+                        Forms\Components\TextInput::make('first_name')
+                            ->required()
+                            ->maxLength(255),
+                        Forms\Components\TextInput::make('last_name')
+                            ->required()
+                            ->maxLength(255),
+                        Forms\Components\TextInput::make('email')
+                            ->required()
+                            ->email()
+                            ->maxLength(255),
+                    ])->columns(3),
+                Forms\Components\Section::make('Employee Address')
+                    ->description('Enter the employee\'s address details.')
+                    ->schema([
+                        Forms\Components\TextInput::make('address')
+                            ->maxLength(255),
+                        Forms\Components\TextInput::make('zip_code')
+                            ->maxLength(255)
+                    ])->columns(2),
+                Forms\Components\Section::make('Employment Details')
+                    ->description('Enter the employment details of the employee.')
+                    ->schema([
+                        Forms\Components\DatePicker::make('date_of_birth')->required()->native(false),
+                        Forms\Components\DatePicker::make('hired_date')->required()->native(false),
+                        Forms\Components\Select::make('country_id')
+                            ->relationship('country', 'name')
+                            ->searchable()
+                            ->preload()
+                            ->live()
+                            ->required(),
+                        Forms\Components\Select::make('state_id')
+                            ->options(function (callable $get) {
+                                $country = \App\Models\Country::find($get('country_id'));
+                                if (!$country) {
+                                    return [];
+                                }
+                                return $country->states()->pluck('name', 'id')->toArray();
+                            })
+                            ->searchable()
+                            ->preload()
+                            ->live()
+                            ->afterStateUpdated(fn(callable $set) => $set('city_id', null))
+                            ->required(),
+                        Forms\Components\Select::make('city_id')
+                            ->options(function (callable $get) {
+                                $state = \App\Models\State::find($get('state_id'));
+                                if (!$state) {
+                                    return [];
+                                }
+                                return $state->cities()->pluck('name', 'id')->toArray();
+                            })
+                            ->searchable()
+                            ->live()
+                            ->preload()
+                            ->required(),
+                        Forms\Components\Select::make('department_id')
+                            ->relationship('department', 'name')
+                            ->searchable()
+                            ->preload()
+                            ->required(),
+                    ])->columns(2),
+            ])->columns(2);
     }
 
     public static function table(Table $table): Table
@@ -74,16 +112,16 @@ class EmployeeResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('zip_code')
                     ->searchable(),
-                Tables\Columns\TextColumn::make('country_id')
+                Tables\Columns\TextColumn::make('country.name')
                     ->numeric()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('state_id')
+                Tables\Columns\TextColumn::make('state.name')
                     ->numeric()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('city_id')
+                Tables\Columns\TextColumn::make('city.name')
                     ->numeric()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('department_id')
+                Tables\Columns\TextColumn::make('department.name')
                     ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
@@ -101,6 +139,7 @@ class EmployeeResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
